@@ -165,7 +165,7 @@ func main() {
 	}
 
 	s := srv.NewFileSrv(root)
-	s.Dotu = true
+	s.Dotu = false
 
 	if *debug {
 		s.Debuglevel = 1
