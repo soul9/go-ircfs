@@ -24,110 +24,28 @@ type Chan struct {
 	contents      *bytes.Buffer
 }
 
-var addr = flag.String("addr", ":5640", "network address")
+var addr = flag.String("addr", "localhost:5640", "network address")
 var debug = flag.Bool("d", false, "print debug messages")
-
-
-func execCmd(ctl *Ctl, words []string) {
-	if len(words) == 0 {
-		return
-	}
-	fmt.Fprintf(ctl.status, ">> %v\n", words)
-	switch words[0] {
-	case "connect":
-		connect(ctl, words)
-	case "join":
-		join(ctl, words)
-	}
-}
-
-func connect(ctl *Ctl, words []string) {
-	var network, server, nick, username, realname, pass string
-	if len(words) < 4 {
-		return
-	}
-	network = words[1]
-	server = words[2]
-	nick = words[3]
-	if len(words) < 5 {
-		username = nick
-	} else {
-		username = words[4]
-	}
-	if len(words) < 6 {
-		realname = username
-	} else {
-		realname = words[5]
-	}
-	if len(words) > 6 {
-		pass = words[6]
-	}
-	n := irc.NewNetwork(server, nick, username, realname, pass, "")
-	err := n.Connect()
-	if err != nil {
-		fmt.Fprintf(ctl.status, "<< %v\n", err)
-		return
-	}
-	fmt.Fprintf(ctl.status, "<< ok\n")
-	ctl.networks[network] = n
-	ch := make(chan *irc.IrcMessage)
-	n.Listen.RegListener("*", "gircfs", ch)
-	go iloop(ch)
-}
-
-func iloop(ch chan *irc.IrcMessage) {
-	for {
-		msg := <-ch
-		fmt.Printf("!!! %v\n", msg)
-	}
-}
-
-func join(ctl *Ctl, words []string) {
-	if len(words) < 3 || len(words) > 4 {
-		fmt.Fprintf(ctl.status, "<< syntax: join <network> <channel> [optional-key]\n")
-		return
-	}
-	var key string
-	if len(words) == 4 {
-		key = words[3]
-	}
-	net := ctl.networks[words[1]]
-	if net == nil {
-		fmt.Fprintf(ctl.status, "<< invalid network\n")
-		return
-	}
-	name := chanName(words[2])
-	net.Join([]string{name}, []string{key})
-
-	c := new(Chan)
-	c.network = words[1]
-	c.name = name
-	c.contents = new(bytes.Buffer)
-	err := c.Add(root, c.network+"_"+c.name, user, nil, 0666, ctl)
-	if err != nil {
-		fmt.Fprintf(ctl.status, "<< %v\n", err)
-		return
-	}
-	fmt.Fprintf(ctl.status, "<< ok\n")
-
-}
-func chanName(name string) string {
-	c0 := name[0]
-	if c0 != '#' && c0 != '&' && c0 != '+' && c0 != '!' {
-		name = "#" + name
-	}
-	return name
-}
+var logdir = flag.String("ld", os.Getenv("HOME") + "/.go-ircfs", "irc log directory")
 
 
 func (ctl *Ctl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Error) {
+	log.Println(string(data))
 	if offset > 0 {
 		return 0, &p.Error{"Long writes not supported", 0}
 	}
 	go func() {
 		lines := strings.Split(string(data), "\n", -1)
 		for _, line := range lines {
-			execCmd(ctl, strings.Fields(line))
+			words := strings.Fields(line)
+			if len(words) == 0 {
+				return
+			}
+			fmt.Fprintf(ctl.status, ">> %v\n", words)
+			switch words[0] {
+			case "connect":
+				connect(ctl, words)
+			}
 		}
 	}()
 	return len(data), nil
@@ -135,6 +53,7 @@ func (ctl *Ctl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Error)
 
 
 func (ctl *Ctl) Read(fid *srv.FFid, buf []byte, offset uint64) (int, *p.Error) {
+	log.Println("read")
 	b := ctl.status.Bytes()[offset:]
 	copy(buf, b)
 	l := len(b)
@@ -165,7 +84,7 @@ func main() {
 	}
 
 	s := srv.NewFileSrv(root)
-	s.Dotu = false
+	s.Dotu = true
 
 	if *debug {
 		s.Debuglevel = 1
