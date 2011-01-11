@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"log"
 	"fmt"
 	"strings"
 )
@@ -15,9 +14,10 @@ import (
 
 type NetCtl struct {
 	srv.File
-	status   *bytes.Buffer
-	net *irc.Network
-	Parent *srv.File
+	status    *bytes.Buffer
+	net       *irc.Network
+	parent    *srv.File
+	netPretty string
 }
 
 func (ctl *NetCtl) Read(fid *srv.FFid, buf []byte, offset uint64) (int, *p.Error) {
@@ -31,7 +31,6 @@ func (ctl *NetCtl) Read(fid *srv.FFid, buf []byte, offset uint64) (int, *p.Error
 }
 
 func (ctl *NetCtl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Error) {
-	log.Println(string(data))
 	if offset > 0 {
 		return 0, &p.Error{"Long writes not supported", 0}
 	}
@@ -87,18 +86,20 @@ func connect(ctl *Ctl, words []string) {
 	c := new(NetCtl)
 	c.status = new(bytes.Buffer)
 	c.net = n
+	c.parent = f
+	c.netPretty = network
 	if err := c.Add(f, "ctl", user, nil, 0660, c); err != nil {
 		fmt.Fprintf(ctl.status, "<< %v\n", err)
 		return
 	}
-	c.Parent = f
-	fmt.Fprintf(ctl.status, "<< ok\n")
-	ch := make(chan *irc.IrcMessage)
-	n.Listen.RegListener("ERROR", "gircfs", ch)
-	go keepalive(ch, c, n)
+	fmt.Fprintf(ctl.status, "<< ok %v\n", words)
+	go keepalive(c, n)
 }
 
-func keepalive(ch chan *irc.IrcMessage, ctl *NetCtl, n *irc.Network) {
+func keepalive(ctl *NetCtl, n *irc.Network) {
+	ch := make(chan *irc.IrcMessage)
+	n.Listen.RegListener("ERROR", "gircfs", ch)
+	defer n.Listen.DelListener("ERROR", "gircfs")
 	for {
 		msg := <-ch
 		n.Reconnect("Error...")

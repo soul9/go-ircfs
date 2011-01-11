@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go9p.googlecode.com/hg/p"
 	"go9p.googlecode.com/hg/p/srv"
-	irc "github.com/soul9/go-irc-chans"
 	"log"
 	"os"
 	"strings"
@@ -14,23 +13,15 @@ import (
 
 type Ctl struct {
 	srv.File
-	status   *bytes.Buffer
-	networks map[string]*irc.Network
-}
-
-type Chan struct {
-	srv.File
-	network, name string
-	contents      *bytes.Buffer
+	status *bytes.Buffer
 }
 
 var addr = flag.String("addr", "localhost:5640", "network address")
 var debug = flag.Bool("d", false, "print debug messages")
-var logdir = flag.String("ld", os.Getenv("HOME") + "/.go-ircfs", "irc log directory")
+var logdir = flag.String("ld", os.Getenv("HOME")+"/.go-ircfs", "irc log directory")
 
 
 func (ctl *Ctl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Error) {
-	log.Println(string(data))
 	if offset > 0 {
 		return 0, &p.Error{"Long writes not supported", 0}
 	}
@@ -53,7 +44,6 @@ func (ctl *Ctl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Error)
 
 
 func (ctl *Ctl) Read(fid *srv.FFid, buf []byte, offset uint64) (int, *p.Error) {
-	log.Println("read")
 	b := ctl.status.Bytes()[offset:]
 	copy(buf, b)
 	l := len(b)
@@ -77,14 +67,13 @@ func main() {
 	}
 	var ctl = new(Ctl)
 	ctl.status = new(bytes.Buffer)
-	ctl.networks = map[string]*irc.Network{}
 	err = ctl.Add(root, "ctl", user, nil, 0666, ctl)
 	if err != nil {
 		goto error
 	}
 
 	s := srv.NewFileSrv(root)
-	s.Dotu = true
+	s.Dotu = false
 
 	if *debug {
 		s.Debuglevel = 1

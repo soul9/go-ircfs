@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"bufio"
 )
 
 import (
@@ -30,7 +31,6 @@ func chanName(name string) string {
 	return name
 }
 
-
 func join(ctl *NetCtl, words []string) {
 	if len(words) < 2 || len(words) > 3 {
 		fmt.Fprintf(ctl.status, "<< syntax: join <network> <channel> [optional-key]\n")
@@ -41,30 +41,32 @@ func join(ctl *NetCtl, words []string) {
 		key = words[2]
 	}
 	name := chanName(words[1])
-	ctl.net.Join([]string{name}, []string{key}) //TODO: join multiple chans, users?
+	if err := ctl.net.Join([]string{name}, []string{key}); err != nil { //TODO: join multiple chans, users?
+		fmt.Fprintf(ctl.status, "<< couldn't join %s: %s\n", name, err.String())
+	}
 
 	f := new(srv.File)
-	if err := f.Add(ctl.Parent, name, user, nil, p.DMDIR|0771, nil); err != nil {
+	if err := f.Add(ctl.parent, name, user, nil, p.DMDIR|0771, nil); err != nil {
 		fmt.Fprintf(ctl.status, "<< %v\n", err)
 		return
 	}
-	
+
 	c := new(ChanCtl)
 	c.contents = new(bytes.Buffer)
-	if err := c.Add(f, name, user, nil, 0660, c); err != nil {
+	if err := c.Add(f, "ctl", user, nil, 0660, nil); err != nil {
 		fmt.Fprintf(ctl.status, "<< %v\n", err)
 		return
 	}
 
 	exch := make(chan bool) //FIXME: need to have a list of chans and their logger's exchs
-	logloop(name, ctl, exch)
-	fmt.Fprintf(ctl.status, "<< ok\n")
+	go logloop(name, ctl, exch)
+	fmt.Fprintf(ctl.status, "<< ok %v\n", words)
 }
 
 func logloop(ircch string, ctl *NetCtl, exch chan bool) {
-	logf, err := os.Open(*logdir + "/" + ctl.net.GetNetName() + "/" + ircch + ".log", os.O_APPEND|os.O_CREATE, 0660)
+	logf, err := os.Open(*logdir+"/"+ctl.netPretty+"/"+ircch+".log", os.O_WRONLY|os.O_CREATE, 0660)
 	if err != nil {
-		fmt.Fprintf(ctl.status, "Couldn't open file, no logging will be performed: %s", ircch)
+		fmt.Fprintf(ctl.status, "Couldn't open file, no logging will be performed: %s\n", ircch)
 		return
 	}
 	defer logf.Close()
@@ -72,10 +74,12 @@ func logloop(ircch string, ctl *NetCtl, exch chan bool) {
 	ch := make(chan *irc.IrcMessage, 10)
 	err = ctl.net.Listen.RegListener("PRIVMSG", ircch+"ircfs", ch)
 	if err != nil {
+		fmt.Fprintf(ctl.status, "Couldn't register listener, no logging will be performed: %s\n", ircch)
 		return
 	}
 	defer ctl.net.Listen.DelListener("PRIVMSG", ircch+"ircfs")
 
+	buf := bufio.NewWriter(logf)
 	for {
 		var msg = new(irc.IrcMessage)
 		select {
@@ -83,8 +87,17 @@ func logloop(ircch string, ctl *NetCtl, exch chan bool) {
 		case <-exch:
 			return
 		}
-		if m, ok := msg.Origin()["chan"]; ok && m == ircch {
-			fmt.Fprintf(logf, "%s", msg.String())
+		if msg.Destination() == ircch {
+			_, err := buf.WriteString(fmt.Sprintf("%s\n", msg.String()))
+			if err != nil {
+				fmt.Fprintf(ctl.status, "Couldn't open file, no logging will be performed: %s\n", ircch)
+				return
+			}
+			err = buf.Flush()
+			if err != nil {
+				fmt.Fprintf(ctl.status, "Couldn't open file, no logging will be performed: %s\n", ircch)
+				return
+			}
 		}
 	}
 }
