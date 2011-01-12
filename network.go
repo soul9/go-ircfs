@@ -46,6 +46,9 @@ func (ctl *NetCtl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Err
 			switch words[0] {
 			case "join":
 				join(ctl, words)
+			case "reconnect":
+				ctl.net.Disconnect(strings.Join(words[1:], " "))
+				fmt.Fprintf(ctl.status, "<< ok %v\n", words)
 			}
 		}
 	}()
@@ -95,27 +98,35 @@ func connect(ctl *Ctl, words []string) {
 	}
 	fmt.Fprintf(ctl.status, "<< ok %v\n", words)
 	exch := make(chan bool)
-	go keepalive(c, n, exch) //TODO: have list of networks and their keepalive's exchs
+	go keepalive(c, exch) //TODO: have list of networks and their keepalive's exchs
 }
 
-func keepalive(ctl *NetCtl, n *irc.Network, exch chan bool) {
+func keepalive(ctl *NetCtl, exch chan bool) {
 	ch := make(chan *irc.IrcMessage)
 	ticker := time.NewTicker(1e09 * 30) //tick every 30 seconds
-	n.Listen.RegListener("ERROR", "gircfs", ch)
-	defer n.Listen.DelListener("ERROR", "gircfs")
+	defer ticker.Stop()
+	ctl.net.Listen.RegListener("ERROR", "gircfs", ch)
+	defer ctl.net.Listen.DelListener("ERROR", "gircfs")
 	for {
 		select {
 		case msg := <-ch:
-			fmt.Fprintf(ctl.status, "Reconnect: %s", msg.String())
+			fmt.Fprintf(ctl.status, "Reconnect: %s\n", msg.String())
+			err := ctl.net.Reconnect("Connection error")
+			for err != nil {
+				err = ctl.net.Reconnect("Connection error")
+			}
+			fmt.Fprintln(ctl.status, "Connected")
 		case <-ticker.C:
+			if ctl.net.Disconnected {
+				fmt.Fprintln(ctl.status, "Reconnect: disconnected")
+				err := ctl.net.Reconnect("Connection error")
+				for err != nil {
+					err = ctl.net.Reconnect("Connection error")
+				}
+				fmt.Fprintln(ctl.status, "Connected")
+			}
 		case <-exch:
 			return
-		}
-		if n.Disconnected {
-			err := n.Reconnect("Connection error")
-			for err != nil {
-				err = n.Reconnect("Connection error")
-			}
 		}
 	}
 }
