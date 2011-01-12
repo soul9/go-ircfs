@@ -49,6 +49,9 @@ func (ctl *NetCtl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Err
 			case "reconnect":
 				ctl.net.Disconnect(strings.Join(words[1:], " "))
 				fmt.Fprintf(ctl.status, "<< ok %v\n", words)
+			case "raw":
+				ctl.net.SendRaw(strings.Join(words[1:], " "))
+				fmt.Fprintf(ctl.status, "<< ok %v\n", words)
 			}
 		}
 	}()

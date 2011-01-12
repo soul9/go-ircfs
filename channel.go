@@ -84,9 +84,13 @@ func join(ctl *NetCtl, words []string) {
 	if len(words) == 4 {
 		key = words[2]
 	}
-	name := chanName(words[1])
-	if err := ctl.net.Join([]string{name}, []string{key}); err != nil { //TODO: join multiple chans, users?
-		fmt.Fprintf(ctl.status, "<< couldn't join %s: %s\n", name, err.String())
+	name := words[1]
+	if _, err := ctl.net.Whois([]string{name}, ""); err != nil {
+		name = chanName(name)
+		if err := ctl.net.Join([]string{name}, []string{key}); err != nil { //TODO: join multiple chans, users?
+			fmt.Fprintf(ctl.status, "<< couldn't join %s: %s\n", name, err.String())
+			return
+		}
 	}
 
 	f := new(srv.File)
