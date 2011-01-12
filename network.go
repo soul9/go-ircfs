@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 )
 
 import (
@@ -93,16 +94,28 @@ func connect(ctl *Ctl, words []string) {
 		return
 	}
 	fmt.Fprintf(ctl.status, "<< ok %v\n", words)
-	go keepalive(c, n)
+	exch := make(chan bool)
+	go keepalive(c, n, exch) //TODO: have list of networks and their keepalive's exchs
 }
 
-func keepalive(ctl *NetCtl, n *irc.Network) {
+func keepalive(ctl *NetCtl, n *irc.Network, exch chan bool) {
 	ch := make(chan *irc.IrcMessage)
+	ticker := time.NewTicker(1e09 * 30) //tick every 30 seconds
 	n.Listen.RegListener("ERROR", "gircfs", ch)
 	defer n.Listen.DelListener("ERROR", "gircfs")
 	for {
-		msg := <-ch
-		n.Reconnect("Error...")
-		fmt.Fprintf(ctl.status, "Reconnect: %s", msg.String())
+		select {
+		case msg := <-ch:
+			fmt.Fprintf(ctl.status, "Reconnect: %s", msg.String())
+		case <-ticker.C:
+		case <-exch:
+			return
+		}
+		if n.Disconnected {
+			err := n.Reconnect("Connection error")
+			for err != nil {
+				err = n.Reconnect("Connection error")
+			}
+		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"bufio"
+	"strings"
 )
 
 import (
@@ -15,12 +16,55 @@ import (
 
 type ChanCtl struct {
 	srv.File
-	contents *bytes.Buffer
+	status *bytes.Buffer
+	net    *irc.Network
+	ircch  string
 }
 
 type ChanLog struct {
 	srv.File
-	contents *bytes.Buffer
+	status *bytes.Buffer
+}
+
+func (ctl *ChanCtl) Read(fid *srv.FFid, buf []byte, offset uint64) (int, *p.Error) {
+	b := ctl.status.Bytes()[offset:]
+	copy(buf, b)
+	l := len(b)
+	if len(buf) < l {
+		l = len(buf)
+	}
+	return l, nil
+}
+
+func (ctl *ChanCtl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Error) {
+	if offset > 0 {
+		return 0, &p.Error{"Long writes not supported", 0}
+	}
+	go func() {
+		lines := strings.Split(string(data), "\n", -1)
+		for _, line := range lines {
+			words := strings.Fields(line)
+			if len(words) == 0 {
+				return
+			}
+			fmt.Fprintf(ctl.status, ">> %v\n", words)
+			switch words[0] {
+			case "msg":
+				if len(words) < 2 {
+					fmt.Fprintf(ctl.status, "<< Not enough params %v\n", words)
+					return
+				}
+
+				if err := ctl.net.Privmsg([]string{ctl.ircch}, strings.Join(words[1:], " ")); err != nil {
+					fmt.Fprintf(ctl.status, "<< %v: %s\n", words, err.String())
+				} else {
+					fmt.Fprintf(ctl.status, "<< ok %v\n", words)
+				}
+				return
+			}
+		}
+	}()
+	return len(data), nil
 }
 
 func chanName(name string) string {
@@ -52,19 +96,21 @@ func join(ctl *NetCtl, words []string) {
 	}
 
 	c := new(ChanCtl)
-	c.contents = new(bytes.Buffer)
-	if err := c.Add(f, "ctl", user, nil, 0660, nil); err != nil {
+	c.net = ctl.net
+	c.status = new(bytes.Buffer)
+	c.ircch = name
+	if err := c.Add(f, "ctl", user, nil, 0660, c); err != nil {
 		fmt.Fprintf(ctl.status, "<< %v\n", err)
 		return
 	}
 
 	exch := make(chan bool) //FIXME: need to have a list of chans and their logger's exchs
-	go logloop(name, ctl, exch)
+	go logloop(name, c, exch, ctl.netPretty)
 	fmt.Fprintf(ctl.status, "<< ok %v\n", words)
 }
 
-func logloop(ircch string, ctl *NetCtl, exch chan bool) {
-	logf, err := os.Open(*logdir+"/"+ctl.netPretty+"/"+ircch+".log", os.O_WRONLY|os.O_CREATE, 0660)
+func logloop(ircch string, ctl *ChanCtl, exch chan bool, netPretty string) {
+	logf, err := os.Open(*logdir+"/"+netPretty+"/"+ircch+".log", os.O_WRONLY|os.O_CREATE, 0660)
 	if err != nil {
 		fmt.Fprintf(ctl.status, "Couldn't open file, no logging will be performed: %s\n", ircch)
 		return
