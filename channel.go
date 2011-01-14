@@ -67,8 +67,7 @@ func (ctl *ChanCtl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Er
 				return
 			}
 			fmt.Fprintf(ctl.status, ">> %v\n", words)
-			switch words[0] {
-			case "msg":
+			if words[0] == "msg" || words[0] == "m" {
 				if len(words) < 2 {
 					fmt.Fprintf(ctl.status, "<< Not enough params %v\n", words)
 					return
@@ -122,14 +121,14 @@ func join(ctl *NetCtl, words []string) {
 	c.net = ctl.net
 	c.status = new(bytes.Buffer)
 	c.ircch = name
-	if err := c.Add(f, "ctl", user, nil, 0660, c); err != nil {
+	if err := c.Add(f, "in", user, nil, 0660, c); err != nil {
 		fmt.Fprintf(ctl.status, "<< %v\n", err)
 		return
 	}
 
 	l := new(ChanLog)
 	l.fname = *logdir + "/" + ctl.netPretty + "/" + name + ".log"
-	if err := l.Add(f, "chanlog", user, nil, 0440, l); err != nil {
+	if err := l.Add(f, "out", user, nil, 0440, l); err != nil {
 		fmt.Fprintf(ctl.status, "<< Couldn't create log file: %v\n", err)
 		return
 	}

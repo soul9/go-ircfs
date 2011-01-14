@@ -46,6 +46,8 @@ func (ctl *NetCtl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Err
 			switch words[0] {
 			case "join":
 				join(ctl, words)
+			case "j":
+				join(ctl, words)
 			case "reconnect":
 				ctl.net.Disconnect(strings.Join(words[1:], " "))
 				fmt.Fprintf(ctl.status, "<< ok %v\n", words)
