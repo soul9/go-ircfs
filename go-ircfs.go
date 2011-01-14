@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go9p.googlecode.com/hg/p"
 	"go9p.googlecode.com/hg/p/srv"
-	"log"
 	"os"
 	"strings"
 )
@@ -87,5 +86,5 @@ func main() {
 	return
 
 error:
-	log.Println(fmt.Sprintf("Error: %s %d", err.Error, err.Errornum))
+	fmt.Println(fmt.Sprintf("Error: %s %d", err.Error, err.Errornum))
 }

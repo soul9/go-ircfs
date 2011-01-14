@@ -23,7 +23,26 @@ type ChanCtl struct {
 
 type ChanLog struct {
 	srv.File
-	status *bytes.Buffer
+	fname string
+}
+
+func (l *ChanLog) Read(fid *srv.FFid, buf []byte, offset uint64) (int, *p.Error) {
+	f, err := os.Open(l.fname, os.O_RDONLY|os.O_CREATE, 0660)
+	if err != nil {
+		fmt.Println("Can't open logfile for reading")
+		return 0, &p.Error{"Can't open logfile for reading", 0}
+	}
+	defer f.Close()
+	count, err := f.ReadAt(buf, int64(offset))
+	if err != nil && err != os.EOF {
+		fmt.Println(fmt.Sprintf("Couldn't read logfile: %s", err.String()))
+		return 0, &p.Error{fmt.Sprintf("Couldn't read logfile: %s", err.String()), 0}
+	}
+	return count, nil
+}
+
+func (ctl *ChanLog) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Error) {
+	return 0, &p.Error{"Read-only file", 0}
 }
 
 func (ctl *ChanCtl) Read(fid *srv.FFid, buf []byte, offset uint64) (int, *p.Error) {
@@ -107,14 +126,21 @@ func join(ctl *NetCtl, words []string) {
 		fmt.Fprintf(ctl.status, "<< %v\n", err)
 		return
 	}
+	
+	l := new(ChanLog)
+	l.fname = *logdir+"/"+ctl.netPretty+"/"+name+".log"
+	if err := l.Add(f, "chanlog", user, nil, 0440, l); err != nil {
+		fmt.Fprintf(ctl.status, "<< Couldn't create log file: %v\n", err)
+		return
+	}
 
 	exch := make(chan bool) //FIXME: need to have a list of chans and their logger's exchs
-	go logloop(name, c, exch, ctl.netPretty)
+	go logloop(name, c, exch, l.fname)
 	fmt.Fprintf(ctl.status, "<< ok %v\n", words)
 }
 
-func logloop(ircch string, ctl *ChanCtl, exch chan bool, netPretty string) {
-	logf, err := os.Open(*logdir+"/"+netPretty+"/"+ircch+".log", os.O_WRONLY|os.O_CREATE, 0660)
+func logloop(ircch string, ctl *ChanCtl, exch chan bool, fname string) {
+	logf, err := os.Open(fname, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0660)
 	if err != nil {
 		fmt.Fprintf(ctl.status, "Couldn't open file, no logging will be performed: %s\n", ircch)
 		return
