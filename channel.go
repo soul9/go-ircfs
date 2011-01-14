@@ -126,9 +126,9 @@ func join(ctl *NetCtl, words []string) {
 		fmt.Fprintf(ctl.status, "<< %v\n", err)
 		return
 	}
-	
+
 	l := new(ChanLog)
-	l.fname = *logdir+"/"+ctl.netPretty+"/"+name+".log"
+	l.fname = *logdir + "/" + ctl.netPretty + "/" + name + ".log"
 	if err := l.Add(f, "chanlog", user, nil, 0440, l); err != nil {
 		fmt.Fprintf(ctl.status, "<< Couldn't create log file: %v\n", err)
 		return
