@@ -51,9 +51,29 @@ func (ctl *NetCtl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Err
 			case "reconnect":
 				ctl.net.Disconnect(strings.Join(words[1:], " "))
 				fmt.Fprintf(ctl.status, "<< ok %v\n", words)
+			case "nick":
+				if len(words) < 2 {
+					fmt.Fprintf(ctl.status, "<< Not enough arguments: %v\n", words)
+					return
+				}
+				_, err := ctl.net.Nick(words[1])
+				if err != nil {
+					fmt.Fprintf(ctl.status, "<< Problem with %v: %s\n", words, err.String())
+					return
+				}
+				fmt.Fprintf(ctl.status, "<< ok %v\n", words)
 			case "raw":
 				ctl.net.SendRaw(strings.Join(words[1:], " "))
 				fmt.Fprintf(ctl.status, "<< ok %v\n", words)
+				/*			case "disconnect":
+							if len(words) < 2 {
+								ctl.net.Disconnect("")
+							} else {
+								ctl.net.Disconnect(strings.Join(words[1:], " "))
+							}
+							ctl.parent.Remove()
+							fmt.Fprintf(root.Find("ctl").status, ">> ok %v\n", words)
+				*/
 			}
 		}
 	}()
@@ -97,7 +117,7 @@ func connect(ctl *Ctl, words []string) {
 	c.net = n
 	c.parent = f
 	c.netPretty = network
-	if err := c.Add(f, "ctl", user, nil, 0660, c); err != nil {
+	if err := c.Add(f, "in", user, nil, 0660, c); err != nil {
 		fmt.Fprintf(ctl.status, "<< %v\n", err)
 		return
 	}

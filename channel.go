@@ -6,6 +6,7 @@ import (
 	"os"
 	"bufio"
 	"strings"
+	"syscall"
 )
 
 import (
@@ -26,6 +27,19 @@ type ChanLog struct {
 	fname string
 }
 
+func toError(err os.Error) *p.Error {
+	var ecode os.Errno
+
+	ename := err.String()
+	if e, ok := err.(os.Errno); ok {
+		ecode = e
+	} else {
+		ecode = syscall.EIO
+	}
+
+	return &p.Error{ename, int(ecode)}
+}
+
 func (l *ChanLog) Read(fid *srv.FFid, buf []byte, offset uint64) (int, *p.Error) {
 	f, err := os.Open(l.fname, os.O_RDONLY|os.O_CREATE, 0660)
 	if err != nil {
@@ -36,7 +50,7 @@ func (l *ChanLog) Read(fid *srv.FFid, buf []byte, offset uint64) (int, *p.Error)
 	count, err := f.ReadAt(buf, int64(offset))
 	if err != nil && err != os.EOF {
 		fmt.Println(fmt.Sprintf("Couldn't read logfile: %s", err.String()))
-		return 0, &p.Error{fmt.Sprintf("Couldn't read logfile: %s", err.String()), 0}
+		return count, toError(err)
 	}
 	return count, nil
 }

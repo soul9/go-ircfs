@@ -12,6 +12,7 @@ import (
 
 type Ctl struct {
 	srv.File
+	parent *srv.File
 	status *bytes.Buffer
 }
 
@@ -34,6 +35,10 @@ func (ctl *Ctl) Write(fid *srv.FFid, data []byte, offset uint64) (int, *p.Error)
 			fmt.Fprintf(ctl.status, ">> %v\n", words)
 			switch words[0] {
 			case "connect":
+				if len(words) < 4 {
+					fmt.Fprintf(ctl.status, ">> Not enough parameters: %v\n", words)
+					return
+				}
 				connect(ctl, words)
 			}
 		}
@@ -66,7 +71,8 @@ func main() {
 	}
 	var ctl = new(Ctl)
 	ctl.status = new(bytes.Buffer)
-	err = ctl.Add(root, "ctl", user, nil, 0666, ctl)
+	ctl.parent = root
+	err = ctl.Add(root, "in", user, nil, 0666, ctl)
 	if err != nil {
 		goto error
 	}
